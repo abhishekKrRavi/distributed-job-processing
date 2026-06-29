@@ -70,6 +70,7 @@ public class GlobalExceptionHandler {
                 .path(req.getRequestURI())
                 .traceId(UUID.randomUUID().toString())
                 .build();
+        ex.printStackTrace();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(err);
     }
 }

@@ -10,6 +10,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -50,7 +51,7 @@ public class Job {
     // JSONB payload stored as Postgres jsonb column. Requires Hibernate 6 support.
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", columnDefinition = "jsonb", nullable = false)
-    private JsonNode payload;
+    private Map<String, Object> payload;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20, nullable = false)

@@ -1,10 +1,10 @@
 package com.platform.job.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import java.util.Map;
 
 /**
  * DTO for submitting a new Job.
@@ -21,7 +21,7 @@ public class JobSubmitRequest {
     private String jobType;
 
     @NotNull(message = "payload must be provided")
-    private JsonNode payload;
+    private Map<String, Object> payload;
 
     @Size(max = 128, message = "clientReqId must be at most 128 characters")
     private String clientReqId;
@@ -29,4 +29,3 @@ public class JobSubmitRequest {
     @Size(max = 64, message = "tenantId must be at most 64 characters")
     private String tenantId;
 }
-

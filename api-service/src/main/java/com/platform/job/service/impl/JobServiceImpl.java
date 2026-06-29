@@ -2,15 +2,18 @@ package com.platform.job.service.impl;
 
 import com.platform.job.dto.JobSubmitRequest;
 import com.platform.job.dto.JobStatusResponse;
+import com.platform.job.events.JobCreatedEvent;
 import com.platform.job.model.Job;
 import com.platform.job.model.JobStatus;
 import com.platform.job.repository.JobRepository;
 import com.platform.job.service.JobService;
 import com.platform.exception.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,10 @@ import java.util.stream.Collectors;
 public class JobServiceImpl implements JobService {
 
     private final JobRepository jobRepository;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    @Value("${spring.kafka.template.default-topic:jobs}")
+    private String defaultTopic;
 
     @Override
     @Transactional
@@ -52,6 +59,18 @@ public class JobServiceImpl implements JobService {
                 .build();
 
         Job saved = jobRepository.save(j);
+
+        // Publish event with only the data workers need (do not publish the entity)
+        JobCreatedEvent event = JobCreatedEvent.builder()
+                .jobId(saved.getId())
+                .jobType(saved.getJobType())
+                .payload(saved.getPayload())
+                .tenantId(saved.getTenantId())
+                .clientReqId(saved.getClientReqId())
+                .build();
+
+        kafkaTemplate.send(defaultTopic, saved.getId().toString(), event);
+
         return mapToResponse(saved);
     }
 

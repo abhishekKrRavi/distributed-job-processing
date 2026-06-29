@@ -1,10 +1,10 @@
 package com.platform.job.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.platform.job.model.JobStatus;
 import lombok.*;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -22,7 +22,7 @@ public class JobStatusResponse {
 
     private String jobType;
 
-    private JsonNode payload;
+    private Map<String, Object> payload;   // ← was JsonNode, now consistent with Job entity
 
     private JobStatus status;
 
@@ -38,4 +38,3 @@ public class JobStatusResponse {
 
     private Instant updatedAt;
 }
-

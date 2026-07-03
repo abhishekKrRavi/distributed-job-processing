@@ -22,7 +22,7 @@ public class JobStatusResponse {
 
     private String jobType;
 
-    private Map<String, Object> payload;   // ← was JsonNode, now consistent with Job entity
+    private Map<String, Object> payload;
 
     private JobStatus status;
 

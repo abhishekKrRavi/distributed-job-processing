@@ -2,8 +2,10 @@ package com.platform.job.model;
 
 public enum JobStatus {
     PENDING,
-    RUNNING,
-    SUCCEEDED,
+    PROCESSING,
+    COMPLETED,
     FAILED,
-    CANCELLED
+    QUEUED,
+    RETRYING,
+    DLQ
 }

@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
@@ -24,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class JobServiceImpl implements JobService {
@@ -34,6 +36,8 @@ public class JobServiceImpl implements JobService {
     @Override
     @Transactional
     public JobStatusResponse submitJob(JobSubmitRequest request, String idempotencyKey) {
+        log.info("Submitting job request jobType={} tenantId={} clientReqId={}",
+                request.getJobType(), request.getTenantId(), request.getClientReqId());
         // Idempotency: if clientReqId provided or header idempotencyKey provided, return existing job
         String clientReqId = request.getClientReqId();
         if ((clientReqId == null || clientReqId.isBlank()) && idempotencyKey != null && !idempotencyKey.isBlank()) {
@@ -57,6 +61,7 @@ public class JobServiceImpl implements JobService {
                 .build();
 
         Job saved = jobRepository.save(j);
+        log.info("Job saved jobId={} jobType={} status={}", saved.getId(), saved.getJobType(), saved.getStatus());
 
         JobCreatedEvent event = JobCreatedEvent.builder()
                 .jobId(saved.getId())
@@ -104,10 +109,10 @@ public class JobServiceImpl implements JobService {
     @Transactional
     public void deleteJob(UUID id) {
         Job j = jobRepository.findById(id).orElseThrow(() -> new JobNotFoundException(id));
-        // Only allow deletion for terminal states: SUCCEEDED, FAILED, CANCELLED
+        // Only allow deletion for terminal states: COMPLETED, FAILED, DLQ
         JobStatus status = j.getStatus();
-        if (!(status == JobStatus.SUCCEEDED || status == JobStatus.FAILED || status == JobStatus.CANCELLED)) {
-            throw new InvalidJobStateException("Only SUCCEEDED, FAILED or CANCELLED jobs can be deleted.");
+        if (!(status == JobStatus.COMPLETED || status == JobStatus.FAILED || status == JobStatus.DLQ)) {
+            throw new InvalidJobStateException("Only COMPLETED, FAILED or DLQ jobs can be deleted.");
         }
         jobRepository.deleteById(id);
     }
@@ -132,12 +137,14 @@ public class JobServiceImpl implements JobService {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
+                    log.info("Publishing job event after commit jobId={} jobType={}", event.getJobId(), event.getJobType());
                     jobProducer.publish(event);
                 }
             });
             return;
         }
 
+        log.info("Publishing job event without active transaction jobId={} jobType={}", event.getJobId(), event.getJobType());
         jobProducer.publish(event);
     }
 }

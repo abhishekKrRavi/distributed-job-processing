@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - base/configmaps/distributed-job-config.yaml
+  - base/secrets/distributed-job-secret.yaml
+  - base/storage/persistent-volume-claims/postgres-data.yaml
+  - base/services/api-service.yaml
+  - base/services/worker-service.yaml
+  - base/services/kafka.yaml
+  - base/services/postgres.yaml
+  - base/workloads/deployments/api-service.yaml
+  - base/workloads/deployments/worker-service.yaml
+  - base/workloads/deployments/kafka.yaml
+  - base/workloads/statefulsets/postgres.yaml
+  - base/networking/ingress/api-service.yaml

@@ -1,6 +1,16 @@
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
+.env
+.env.*
+!.env.example
+docker-compose.override.yml
+application-local.properties
+*.log
+*.pem
+*.key
+*.p12
+*.jks
 !**/src/main/**/target/
 !**/src/test/**/target/
 

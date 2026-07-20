@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: distributed-job-config
+data:
+  SPRING_PROFILES_ACTIVE: kubernetes
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/distributed_job_db
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  KAFKA_DEFAULT_TOPIC: job.requests
+  KAFKA_CONSUMER_GROUP: worker-group
+  SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+  SPRING_FLYWAY_ENABLED: "true"
+  SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"

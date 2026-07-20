@@ -19,6 +19,11 @@ Main features:
 - Containerized local development with Docker Compose.
 - Kubernetes manifests for cluster deployment.
 
+## Architecture
+The diagram below shows how the API service, Kafka, PostgreSQL, and worker service fit together.
+
+![Distributed Job Processing Architecture](./docs/Architecture%20Diagram.png)
+
 Tech stack:
 - Java 17
 - Spring Boot 4.1.0

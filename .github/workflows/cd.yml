@@ -1,0 +1,157 @@
+# =============================================================================
+# CD Pipeline — Automated Release & Docker Image Publishing
+# =============================================================================
+# Triggered on:
+#   • Pushing a version tag (v*) — e.g. git tag v1.0.0 && git push --tags
+#   • Manual dispatch from the Actions tab (workflow_dispatch)
+#
+# Builds Docker images for api-service and worker-service, then pushes them
+# to GitHub Container Registry (ghcr.io).
+# =============================================================================
+
+name: CD — Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0)"
+        required: true
+        default: "0.0.1"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  JAVA_VERSION: "17"
+  JAVA_DISTRIBUTION: "temurin"
+  REGISTRY: ghcr.io
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build, test, and produce JARs
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      - name: Install common-library
+        run: mvn -B -f common-library/pom.xml install -DskipTests
+
+      - name: Build & Test api-service
+        run: mvn -B -f api-service/pom.xml clean verify
+
+      - name: Build & Test worker-service
+        run: mvn -B -f worker-service/pom.xml clean verify
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build and push Docker images to GHCR
+  # ---------------------------------------------------------------------------
+  docker-release:
+    name: Docker Release — ${{ matrix.service }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-service, worker-service]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Derive the image tag from the Git tag or the manual input
+      - name: Determine image tag
+        id: meta
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+          else
+            TAG="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Image tag: $TAG"
+
+      - name: Build & push Docker image (${{ matrix.service }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Create a GitHub Release with notes
+  # ---------------------------------------------------------------------------
+  github-release:
+    name: Create GitHub Release
+    needs: docker-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          # Collect commit messages since last tag for release notes
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            LOG=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            LOG=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          cat > release_notes.md <<EOF
+          ## What's Changed
+
+          $LOG
+
+          ## Docker Images
+
+          \`\`\`
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/api-service:${GITHUB_REF_NAME#v}
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/worker-service:${GITHUB_REF_NAME#v}
+          \`\`\`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

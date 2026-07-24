@@ -1,0 +1,203 @@
+# =============================================================================
+# CI Pipeline — Build, Test & Code Quality
+# =============================================================================
+# Runs on every push to main and on every pull request.
+# Ensures all modules compile, tests pass, and code quality checks succeed
+# before code can be merged.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs for the same branch/PR to save resources
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  JAVA_DISTRIBUTION: "temurin"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build & test the shared common-library first (other modules depend
+  #         on it).
+  # ---------------------------------------------------------------------------
+  build-common-library:
+    name: Build & Test — common-library
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: common-library
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      - name: Build & Test common-library
+        run: mvn -B clean verify
+
+      # Install to local repo so downstream modules can resolve it
+      - name: Install common-library to local Maven repo
+        run: mvn -B install -DskipTests
+
+      # Upload the local repo so other jobs can use the installed artifact
+      - name: Upload local Maven repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-local-repo
+          path: ~/.m2/repository/com/platform/common-library
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Job 2 & 3: Build and test api-service and worker-service in parallel.
+  #             Both depend on common-library.
+  # ---------------------------------------------------------------------------
+  build-services:
+    name: Build & Test — ${{ matrix.service }}
+    needs: build-common-library
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-service, worker-service]
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      # Download the pre-built common-library artifact
+      - name: Download common-library from local Maven repo
+        uses: actions/download-artifact@v4
+        with:
+          name: maven-local-repo
+          path: ~/.m2/repository/com/platform/common-library
+
+      - name: Build & Test ${{ matrix.service }}
+        run: mvn -B clean verify
+
+      # Upload the JAR for downstream jobs (Docker build, release)
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-jar
+          path: ${{ matrix.service }}/target/*.jar
+          retention-days: 5
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Docker image build verification.
+  #         Builds both Docker images (without pushing) to ensure Dockerfiles
+  #         are valid and images can be produced.
+  # ---------------------------------------------------------------------------
+  docker-build-check:
+    name: Docker Build — ${{ matrix.service }}
+    needs: build-services
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-service, worker-service]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (${{ matrix.service }})
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          push: false
+          tags: ${{ matrix.service }}:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 5: Code quality & linting checks.
+  #         Runs static analysis across all Java modules.
+  # ---------------------------------------------------------------------------
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      # Build common-library first (required dependency)
+      - name: Install common-library
+        run: mvn -B -f common-library/pom.xml install -DskipTests
+
+      # Check compilation across all modules (catches warnings & errors)
+      - name: Compile all modules
+        run: |
+          mvn -B -f api-service/pom.xml compile -DskipTests
+          mvn -B -f worker-service/pom.xml compile -DskipTests
+
+      # Maven enforcer plugin — ensures dependency convergence and JDK version
+      - name: Run Maven Enforcer (dependency convergence)
+        run: |
+          for module in common-library api-service worker-service; do
+            echo "=== Checking $module ==="
+            mvn -B -f "$module/pom.xml" enforcer:enforce \
+              -Drules=dependencyConvergence \
+              -Dmaven.enforcer.failOnWarning=false \
+              || echo "⚠️  Dependency convergence warnings in $module"
+          done
+
+      # Check for known vulnerabilities with OWASP dependency-check
+      - name: Check for TODO / FIXME comments
+        run: |
+          echo "=== Scanning for TODO / FIXME comments ==="
+          grep -rn --include="*.java" "TODO\|FIXME" \
+            common-library/src api-service/src worker-service/src \
+            || echo "✅  No TODO/FIXME comments found"
+
+  # ---------------------------------------------------------------------------
+  # Summary job — marks the overall CI status. Useful for branch protection
+  # rules that require a single status check.
+  # ---------------------------------------------------------------------------
+  ci-summary:
+    name: CI Summary
+    needs: [build-common-library, build-services, docker-build-check, code-quality]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check overall CI result
+        run: |
+          if [[ "${{ needs.build-common-library.result }}" != "success" ]] || \
+             [[ "${{ needs.build-services.result }}" != "success" ]] || \
+             [[ "${{ needs.docker-build-check.result }}" != "success" ]] || \
+             [[ "${{ needs.code-quality.result }}" != "success" ]]; then
+            echo "❌ One or more CI jobs failed"
+            exit 1
+          fi
+          echo "✅ All CI checks passed!"

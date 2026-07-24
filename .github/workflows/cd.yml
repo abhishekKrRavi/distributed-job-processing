@@ -33,7 +33,9 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Job 1: Build, test, and produce JARs
+  # Job 1: Quality gate — run tests before building Docker images.
+  # Note: Docker images are built via multi-stage Dockerfiles that compile
+  # their own JARs, so the JARs produced here are not reused downstream.
   # ---------------------------------------------------------------------------
   build:
     name: Build & Test
@@ -50,13 +52,13 @@ jobs:
           cache: maven
 
       - name: Install common-library
-        run: mvn -B -f common-library/pom.xml install -DskipTests
+        run: ./mvnw -B -f common-library/pom.xml install -DskipTests
 
       - name: Build & Test api-service
-        run: mvn -B -f api-service/pom.xml clean verify
+        run: ./mvnw -B -f api-service/pom.xml clean verify
 
       - name: Build & Test worker-service
-        run: mvn -B -f worker-service/pom.xml clean verify
+        run: ./mvnw -B -f worker-service/pom.xml clean verify
 
   # ---------------------------------------------------------------------------
   # Job 2: Build and push Docker images to GHCR

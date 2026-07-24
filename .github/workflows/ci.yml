@@ -46,11 +46,11 @@ jobs:
           cache: maven
 
       - name: Build & Test common-library
-        run: mvn -B clean verify
+        run: ./mvnw -B clean verify
 
       # Install to local repo so downstream modules can resolve it
       - name: Install common-library to local Maven repo
-        run: mvn -B install -DskipTests
+        run: ./mvnw -B install -DskipTests
 
       # Upload the local repo so other jobs can use the installed artifact
       - name: Upload local Maven repo
@@ -94,7 +94,7 @@ jobs:
           path: ~/.m2/repository/com/platform/common-library
 
       - name: Build & Test ${{ matrix.service }}
-        run: mvn -B clean verify
+        run: ./mvnw -B clean verify
 
       # Upload the JAR for downstream jobs (Docker build, release)
       - name: Upload JAR artifact
@@ -154,30 +154,30 @@ jobs:
 
       # Build common-library first (required dependency)
       - name: Install common-library
-        run: mvn -B -f common-library/pom.xml install -DskipTests
+        run: ./mvnw -B -f common-library/pom.xml install -DskipTests
 
       # Check compilation across all modules (catches warnings & errors)
       - name: Compile all modules
         run: |
-          mvn -B -f api-service/pom.xml compile -DskipTests
-          mvn -B -f worker-service/pom.xml compile -DskipTests
+          ./mvnw -B -f api-service/pom.xml compile -DskipTests
+          ./mvnw -B -f worker-service/pom.xml compile -DskipTests
 
       # Maven enforcer plugin — ensures dependency convergence and JDK version
       - name: Run Maven Enforcer (dependency convergence)
         run: |
           for module in common-library api-service worker-service; do
             echo "=== Checking $module ==="
-            mvn -B -f "$module/pom.xml" enforcer:enforce \
+            ./mvnw -B -f "$module/pom.xml" enforcer:enforce \
               -Drules=dependencyConvergence \
               -Dmaven.enforcer.failOnWarning=false \
               || echo "⚠️  Dependency convergence warnings in $module"
           done
 
-      # Check for known vulnerabilities with OWASP dependency-check
+      # Scan source code for leftover TODO / FIXME comments
       - name: Check for TODO / FIXME comments
         run: |
           echo "=== Scanning for TODO / FIXME comments ==="
-          grep -rn --include="*.java" "TODO\|FIXME" \
+          grep -rn --include="*.java" --include="*.properties" --include="*.yml" --include="*.xml" "TODO\|FIXME" \
             common-library/src api-service/src worker-service/src \
             || echo "✅  No TODO/FIXME comments found"
 

@@ -227,4 +227,6 @@ Suggested workflow:
 - Keep Kafka topic names and database schema changes documented
 
 ## License
-No license file is currently present in the repository. Add a license file if you want to make the project's usage terms explicit.
+This project is licensed under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for the full text.
+
+Copyright (c) 2026 abhishekKrRavi

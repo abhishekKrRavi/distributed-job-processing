@@ -1,0 +1,61 @@
+# =============================================================================
+# Dependabot — Automated Dependency Updates
+# =============================================================================
+# Dependabot will open PRs to keep Maven dependencies and GitHub Actions
+# up-to-date. Each PR will be validated by the CI workflow automatically.
+# =============================================================================
+
+version: 2
+updates:
+  # Maven dependencies for common-library
+  - package-ecosystem: "maven"
+    directory: "/common-library"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 5
+
+  # Maven dependencies for api-service
+  - package-ecosystem: "maven"
+    directory: "/api-service"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 5
+
+  # Maven dependencies for worker-service
+  - package-ecosystem: "maven"
+    directory: "/worker-service"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "ci/cd"
+      - "dependencies"
+
+  # Docker base images
+  - package-ecosystem: "docker"
+    directory: "/api-service"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "docker"
+      - "dependencies"
+
+  - package-ecosystem: "docker"
+    directory: "/worker-service"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "docker"
+      - "dependencies"

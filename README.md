@@ -1,4 +1,9 @@
 # Distributed Job Processing
+
+![CI Pipeline](https://github.com/abhishekKrRavi/distributed-job-processing/actions/workflows/ci.yml/badge.svg)
+![CD Pipeline](https://github.com/abhishekKrRavi/distributed-job-processing/actions/workflows/deploy.yml/badge.svg)
+![Release Pipeline](https://github.com/abhishekKrRavi/distributed-job-processing/actions/workflows/release.yml/badge.svg)
+
 Distributed, event-driven job processing platform built with Spring Boot, PostgreSQL, Kafka, and Docker/Kubernetes support.
 
 ## Overview
@@ -96,8 +101,28 @@ System requirements:
 ### Run with Docker Compose
 Bring up the full local stack:
 
+#### Linux / Windows Subsystem for Linux (WSL):
 ```bash
-docker compose -f docker/docker-compose.yml up --build
+# 1. Navigate to the project root directory in WSL
+cd /mnt/c/Users/xyz/distributed-job-processing
+
+# 2. Build the project artifacts locally first so Docker can package them
+./mvnw clean package -DskipTests
+
+# 3. Start the entire ecosystem (DB, Kafka, UI, API, and Worker) in the background
+docker-compose -f docker/docker-compose.yml up --build -d
+
+# 4. Check the logs of all running containers
+docker-compose -f docker/docker-compose.yml logs -f
+```
+
+> [!NOTE]
+> **WSL Network Resolution**: If `curl` commands using `localhost` fail with connection errors, use `127.0.0.1` instead (e.g., `http://127.0.0.1:8080/api/v1/jobs`), as WSL2 DNS loopbacks can occasionally block `localhost` bindings.
+
+#### Windows Command Prompt / PowerShell:
+```cmd
+.\mvnw.cmd clean package -DskipTests
+docker compose -f docker\docker-compose.yml up --build -d
 ```
 
 Services exposed by the compose file:
@@ -225,6 +250,35 @@ Suggested workflow:
 - Branch naming: `codex/<short-description>`
 - Use Maven formatting and standard Spring Boot conventions
 - Keep Kafka topic names and database schema changes documented
+
+## CI/CD Pipelines & Branch Protection
+
+Automated workflows are managed via GitHub Actions:
+
+- **CI Pipeline** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+  Runs code linting, unit/integration tests, Maven compilation, and Docker dry-run build verification on every Pull Request and push to `main`/`master`/`develop`.
+- **CD Pipeline** ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)):
+  Automatically builds and pushes production Docker images (`api-service` and `worker-service`) to GitHub Container Registry (`ghcr.io`) and validates Kubernetes manifests on push to `main`/`master`.
+- **Release Pipeline** ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+  Generates automated GitHub Releases with compiled JAR artifacts whenever a version tag matching `v*.*.*` is pushed.
+
+### Enforcing Merge Protection Rules in GitHub
+
+To ensure pull requests are **merged only if the CI pipeline succeeds**:
+
+1. Go to your repository on GitHub: **Settings** > **Branches**.
+2. Under **Branch protection rules**, click **Add branch protection rule** (or edit existing rule for `main` / `master`).
+3. Set **Branch name pattern** to `main` (and `master`).
+4. Select **Require status checks to pass before merging**.
+5. Check **Require branches to be up to date before merging**.
+6. In the status checks search bar, search and select:
+   - `Lint & Code Quality`
+   - `Unit & Integration Tests`
+   - `Build Maven Artifacts`
+   - `Docker Build Verification`
+7. Click **Create** or **Save changes**.
+
+---
 
 ## License
 This project is licensed under the [MIT License](LICENSE). See the [LICENSE](LICENSE) file for the full text.

@@ -94,7 +94,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.platform.workerservice.WorkerServiceApplication</mainClass>
+                    <mainClass>com.platform.WorkerServiceApplication</mainClass>
                 </configuration>
             </plugin>
         </plugins>

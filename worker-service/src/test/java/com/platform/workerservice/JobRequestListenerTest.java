@@ -5,6 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.platform.job.events.JobCreatedEvent;
+import com.platform.workerservice.logging.WorkerLog;
 import com.platform.workerservice.service.JobOrchestratorService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +25,9 @@ class JobRequestListenerTest {
 
     @Mock
     private JobOrchestratorService orchestratorService;
+
+    @Mock
+    private WorkerLog workerLog;
 
     @InjectMocks
     private JobRequestListener listener;

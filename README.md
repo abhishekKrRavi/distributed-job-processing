@@ -101,8 +101,28 @@ System requirements:
 ### Run with Docker Compose
 Bring up the full local stack:
 
+#### Linux / Windows Subsystem for Linux (WSL):
 ```bash
-docker compose -f docker/docker-compose.yml up --build
+# 1. Navigate to the project root directory in WSL
+cd /mnt/c/Users/xyz/distributed-job-processing
+
+# 2. Build the project artifacts locally first so Docker can package them
+./mvnw clean package -DskipTests
+
+# 3. Start the entire ecosystem (DB, Kafka, UI, API, and Worker) in the background
+docker-compose -f docker/docker-compose.yml up --build -d
+
+# 4. Check the logs of all running containers
+docker-compose -f docker/docker-compose.yml logs -f
+```
+
+> [!NOTE]
+> **WSL Network Resolution**: If `curl` commands using `localhost` fail with connection errors, use `127.0.0.1` instead (e.g., `http://127.0.0.1:8080/api/v1/jobs`), as WSL2 DNS loopbacks can occasionally block `localhost` bindings.
+
+#### Windows Command Prompt / PowerShell:
+```cmd
+.\mvnw.cmd clean package -DskipTests
+docker compose -f docker\docker-compose.yml up --build -d
 ```
 
 Services exposed by the compose file:

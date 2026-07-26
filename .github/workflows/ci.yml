@@ -44,6 +44,21 @@ jobs:
     name: Unit & Integration Tests
     runs-on: ubuntu-latest
     needs: lint-and-quality
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: distributed_job_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -56,6 +71,11 @@ jobs:
           cache: maven
 
       - name: Run Tests
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/distributed_job_db
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
         run: ./mvnw test
 
       - name: Upload Test Results

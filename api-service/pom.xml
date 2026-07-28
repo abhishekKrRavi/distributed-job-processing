@@ -136,6 +136,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.platform.ApiServiceApplication</mainClass>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -59,5 +59,11 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Kafka - shared producer config for api-service and worker-service -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
     </dependencies>
 </project>

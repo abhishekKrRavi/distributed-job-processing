@@ -182,10 +182,139 @@ Supported query parameters:
 ### Delete a job
 `DELETE /api/v1/jobs/{id}`
 
-Deletion is allowed only when the job is in a terminal state:
-- `COMPLETED`
-- `FAILED`
-- `DLQ`
+Deletion is allowed only when the job is in a terminal state (`COMPLETED`, `FAILED`, or `DLQ`).
+
+```bash
+curl -X DELETE http://localhost:8080/api/v1/jobs/<job-id>
+```
+
+The API returns `204 No Content` on success. Attempting to delete a job that is still `PENDING`, `PROCESSING`, `RETRYING`, or `QUEUED` will return `409 Conflict`.
+
+---
+
+## Simulating Errors & Verifying Retry / DLQ Behaviour
+
+The `REPORT` processor supports a `simulateError` field in the job payload to reproduce failure scenarios without modifying any code. All simulations use the same endpoint:
+
+```
+POST /api/v1/jobs
+```
+
+Use the `Idempotency-Key` header with a unique value per request to avoid duplicate-submission rejection.
+
+---
+
+### Scenario 1 — Transient error (recovers on retry)
+
+The job fails on the **first attempt only**, then succeeds on the next retry.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: req-transient-1" \
+  -d '{
+    "jobType": "REPORT",
+    "payload": {
+      "reportId": 202,
+      "simulateError": "transient"
+    },
+    "clientReqId": "req-transient-1",
+    "tenantId": "tenant-1"
+  }'
+```
+
+**Expected job lifecycle:**
+```
+PENDING → PROCESSING → RETRYING (attempt 1 fails) → PROCESSING → COMPLETED
+```
+
+**How to verify:**
+1. Note the `jobId` from the `202` response.
+2. Poll `GET /api/v1/jobs/<jobId>` — status should move from `RETRYING` → `COMPLETED`.
+3. In the worker logs, look for `stage=RETRY_BACKOFF` followed by `stage=COMPLETED`.
+
+---
+
+### Scenario 2 — Fatal / non-retryable error
+
+The job fails immediately with a non-retryable exception (`IllegalArgumentException`). No retries are attempted; the job goes directly to `FAILED`.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: req-fatal-1" \
+  -d '{
+    "jobType": "REPORT",
+    "payload": {
+      "reportId": 203,
+      "simulateError": "fatal"
+    },
+    "clientReqId": "req-fatal-1",
+    "tenantId": "tenant-1"
+  }'
+```
+
+**Expected job lifecycle:**
+```
+PENDING → PROCESSING → FAILED
+```
+
+**How to verify:**
+1. Poll `GET /api/v1/jobs/<jobId>` — status should reach `FAILED` after the first processing attempt.
+2. In the worker logs, look for `stage=TERMINAL_STATE status=FAILED attempts=1`.
+3. No `stage=RETRY_BACKOFF` log lines should appear.
+
+---
+
+### Scenario 3 — Persistent transient error (exhausts all retries → DLQ)
+
+The job fails on **every** attempt with a retryable exception. After exhausting `max-attempts` (default: 3), the job is moved to `DLQ` and the original event is published to the `job.dlq` Kafka topic.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8080/api/v1/jobs \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: req-always-1" \
+  -d '{
+    "jobType": "REPORT",
+    "payload": {
+      "reportId": 204,
+      "simulateError": "always"
+    },
+    "clientReqId": "req-always-1",
+    "tenantId": "tenant-1"
+  }'
+```
+
+**Expected job lifecycle:**
+```
+PENDING → PROCESSING → RETRYING (attempt 1) → RETRYING (attempt 2) → DLQ (attempt 3)
+```
+
+**How to verify:**
+1. Poll `GET /api/v1/jobs/<jobId>` — status should reach `DLQ`.
+2. In the worker logs, look for three `stage=RETRY_BACKOFF` entries followed by `stage=TERMINAL_STATE status=DLQ`.
+3. Open Kafka UI at `http://localhost:8090` and confirm a message is present in the `job.dlq` topic.
+4. Once a job is in `DLQ` status it can be deleted:
+   ```bash
+   curl -X DELETE http://localhost:8080/api/v1/jobs/<jobId>
+   ```
+
+---
+
+### Simulation reference
+
+| `simulateError` value | Exception type | Retryable | Final status |
+|-----------------------|----------------|-----------|--------------|
+| `transient` | `RuntimeException` | Yes | `COMPLETED` (recovers on retry 1) |
+| `fatal` | `IllegalArgumentException` | No | `FAILED` (no retries) |
+| `always` | `RuntimeException` | Yes | `DLQ` (exhausts all retries) |
+
+> **Note:** Omitting `simulateError` from the payload submits a normal job that completes successfully after the simulated processing delay.
+
+---
 
 ### Supported job processing
 The worker currently includes a `REPORT` processor. Additional job types can be added by implementing the `JobProcessor` interface and registering the processor as a Spring bean.
@@ -222,7 +351,7 @@ The worker currently includes a `REPORT` processor. Additional job types can be 
    - Async processing logic in `worker-service`
 
 Suggested workflow:
-- Branch naming: `codex/<short-description>`
+- Branch naming: `feature/<feature-name>`
 - Use Maven formatting and standard Spring Boot conventions
 - Keep Kafka topic names and database schema changes documented
 

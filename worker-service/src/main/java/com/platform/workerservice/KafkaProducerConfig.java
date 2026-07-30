@@ -1,5 +1,6 @@
-package com.platform.job;
+package com.platform.workerservice;
 
+import com.platform.job.AbstractKafkaProducerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.support.serializer.JsonSerializer;
@@ -7,13 +8,14 @@ import org.springframework.kafka.support.serializer.JsonSerializer;
 import java.util.Map;
 
 /**
- * Kafka producer configuration for the API service.
+ * Kafka producer configuration for the worker service.
  *
  * <p>Extends {@link AbstractKafkaProducerConfig} and configures JSON value serialization
- * for publishing {@code JobCreatedEvent} messages to the job.requests topic.
+ * for publishing exhausted jobs to the Dead Letter Queue (DLQ) topic.
  *
- * <p>Future customizations (e.g., custom acks, compression, idempotence) for
- * the API service should be added here via {@link #customizeProducerProps(Map)}.
+ * <p>Future customizations specific to the worker (e.g., higher retries, idempotent
+ * producer settings, or different acks for reliability) should be added here
+ * via {@link #customizeProducerProps(Map)}.
  */
 @Configuration
 public class KafkaProducerConfig extends AbstractKafkaProducerConfig {

@@ -25,7 +25,9 @@ class ReportProcessorTest {
         logger.addAppender(appender);
         logger.setLevel(Level.INFO);
 
-        ReportProcessor processor = new ReportProcessor();
+        com.platform.workerservice.processor.simulation.ErrorSimulationRegistry simulationRegistry = 
+                org.mockito.Mockito.mock(com.platform.workerservice.processor.simulation.ErrorSimulationRegistry.class);
+        ReportProcessor processor = new ReportProcessor(simulationRegistry);
         Job job = Job.builder()
                 .id(UUID.randomUUID())
                 .jobType("REPORT")
